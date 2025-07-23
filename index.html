@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tennis Scoreboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Cormorant+Garamond:wght@700&family=Dancing+Script:wght@700&family=Old+Standard+TT:wght@700&family=Roboto:wght@400;700;900&family=Teko:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    
+    <!-- PWA Settings -->
+    <meta name="theme-color" content="#0D69C2"/>
+    <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48dGV4dCB5PSIuOWVtIiBmb250LXNpemU9IjkwIj7wn42lPC90ZXh0Pjwvc3ZnPg==">
+    <link rel="manifest" id="manifest">
+
+    <style>
+        /* Define fonts for themes */
+        .theme-wimbledon { font-family: 'Old Standard TT', serif; }
+        .theme-usopen { font-family: 'Archivo Black', sans-serif; }
+        .theme-ausopen { font-family: 'Roboto', sans-serif; }
+        .theme-frenchopen { font-family: 'Teko', sans-serif; font-size: 1.1em; }
+        .theme-melike { font-family: 'Dancing Script', cursive; font-size: 1.2em; }
+        .theme-ostfalia { font-family: 'Roboto', sans-serif; }
+        .theme-ludwig { font-family: 'Cormorant Garamond', serif; }
+
+
+        /* General styles */
+        body, html {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .player-section {
+            transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease;
+        }
+        .player-name {
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            display: inline-block;
+        }
+        .player-name:focus {
+            outline: none;
+            border-bottom: 2px solid currentColor;
+        }
+        .server-indicator { 
+            transition: opacity 0.3s ease; 
+            opacity: 0;
+        }
+        .serving-player .server-indicator {
+            opacity: 1;
+        }
+        
+        /* Settings Modal */
+        .settings-modal {
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .settings-modal.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+        .setting-btn.active {
+            box-shadow: inset 0 0 0 3px #3B82F6; /* Use inset shadow to avoid layout shift */
+        }
+
+        /* Cleaner Controls */
+        #controls button {
+            background-color: rgba(0, 0, 0, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            transition: background-color 0.2s ease;
+        }
+        #controls button:hover {
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+
+        /* --- Layout & Mode Specific Styles --- */
+        .layout-vertical #player1-section { flex-direction: column-reverse; }
+        .layout-horizontal #player1-section, .layout-horizontal #player2-section { padding-top: 1rem; }
+        .layout-horizontal #player1-header { flex-direction: row-reverse; }
+
+        /* Font size based on game mode */
+        .mode-singles .player-name { font-size: 2.25rem; } /* text-4xl */
+        @media (min-width: 768px) { .mode-singles .player-name { font-size: 3.75rem; } } /* md:text-6xl */
+        .mode-doubles .player-name { font-size: 1.875rem; } /* text-3xl */
+        @media (min-width: 768px) { .mode-doubles .player-name { font-size: 2.25rem; } } /* md:text-4xl */
+
+        /* Status Banner base */
+        .status-banner {
+            opacity: 0;
+        }
+        .animations-enabled .status-banner {
+            transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+        .status-banner.fade-in {
+            opacity: 1;
+        }
+        /* Vertical & Horizontal Layout Banner */
+        .layout-vertical .status-banner, .layout-horizontal .status-banner {
+            top: 50%;
+            left: 50%;
+            width: auto;
+            border-radius: 0.5rem;
+            transform: translate(-50%, -50%) scale(0.9);
+        }
+        .layout-vertical .status-banner.fade-in, .layout-horizontal .status-banner.fade-in {
+            transform: translate(-50%, -50%) scale(1);
+        }
+        
+        /* Game Over Overlay */
+        .game-over-overlay {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 25; /* Below status banner but above scoreboard */
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+        .game-over .game-over-overlay {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .animations-enabled .player-header {
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+        .layout-vertical .status-active #player1-header {
+            transform: translateX(-100%);
+            opacity: 0;
+        }
+        .layout-vertical .status-active #player2-header {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    </style>
+</head>
+<body class="bg-gray-900">
+
+    <div id="app-container" class="h-screen w-screen flex flex-col theme-ausopen">
+        <div id="game-over-overlay" class="game-over-overlay"></div>
+        <!-- Status Banner -->
+        <div id="status-banner" class="absolute p-4 md:p-6 text-center z-30 status-banner">
+            <span id="status-text" class="text-2xl md:text-4xl lg:text-5xl font-bold block"></span>
+            <div id="final-score-container" class="mt-4"></div>
+        </div>
+
+        <!-- Main Scoreboard -->
+        <div id="scoreboard-container" class="flex-grow flex flex-col">
+            <!-- Player 1 Section -->
+            <div id="player1-section" class="player-section flex-1 flex flex-col relative cursor-pointer border-b-4 p-4 md:p-6">
+                <div id="player1-header" class="player-header w-full flex justify-between items-center flex-shrink-0">
+                    <div class="player-names">
+                        <div id="player1-p1" class="flex items-center gap-2">
+                            <div class="server-indicator"><div class="w-1 h-5 md:w-1.5 md:h-7 bg-current"></div></div>
+                            <span id="player1-name1" contenteditable="true" class="player-name font-bold truncate" spellcheck="false">Spieler 1</span>
+                        </div>
+                        <div id="player1-p2" class="flex items-center gap-2 hidden">
+                            <div class="server-indicator"><div class="w-1 h-5 md:w-1.5 md:h-7 bg-current"></div></div>
+                            <span id="player1-name2" contenteditable="true" class="player-name font-bold truncate" spellcheck="false">Spieler 1B</span>
+                        </div>
+                    </div>
+                    <div class="flex items-baseline gap-2 md:gap-4 text-3xl md:text-5xl font-bold select-none">
+                        <div id="player1-set-scores" class="flex gap-2 md:gap-4"></div>
+                        <div id="player1-games" class="w-12 md:w-16 text-center">0</div>
+                    </div>
+                </div>
+                <div class="player-points flex-grow w-full flex justify-center items-center">
+                    <span id="player1-points" class="font-black leading-none text-[11rem] sm:text-[15rem] md:text-[20rem] lg:text-[26rem] select-none">0</span>
+                </div>
+            </div>
+
+            <!-- Player 2 Section -->
+            <div id="player2-section" class="player-section flex-1 flex flex-col relative cursor-pointer p-4 md:p-6">
+                 <div id="player2-header" class="player-header w-full flex justify-between items-center flex-shrink-0">
+                    <div class="player-names">
+                        <div id="player2-p1" class="flex items-center gap-2">
+                            <div class="server-indicator"><div class="w-1 h-5 md:w-1.5 md:h-7 bg-current"></div></div>
+                            <span id="player2-name1" contenteditable="true" class="player-name font-bold truncate" spellcheck="false">Spieler 2</span>
+                        </div>
+                        <div id="player2-p2" class="flex items-center gap-2 hidden">
+                            <div class="server-indicator"><div class="w-1 h-5 md:w-1.5 md:h-7 bg-current"></div></div>
+                            <span id="player2-name2" contenteditable="true" class="player-name font-bold truncate" spellcheck="false">Spieler 2B</span>
+                        </div>
+                    </div>
+                    <div class="flex items-baseline gap-2 md:gap-4 text-3xl md:text-5xl font-bold select-none">
+                        <div id="player2-set-scores" class="flex gap-2 md:gap-4"></div>
+                        <div id="player2-games" class="w-12 md:w-16 text-center">0</div>
+                    </div>
+                 </div>
+                <div class="player-points flex-grow w-full flex justify-center items-center">
+                    <span id="player2-points" class="font-black leading-none text-[11rem] sm:text-[15rem] md:text-[20rem] lg:text-[26rem] select-none">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls" class="absolute bottom-0 left-0 right-0 p-4 flex justify-center items-center gap-4 z-40">
+            <button id="undo-button" title="Rückgängig" class="p-2 rounded-lg font-semibold text-lg">
+                <span class="material-symbols-outlined">undo</span>
+            </button>
+            <button id="settings-button" title="Einstellungen" class="p-2 rounded-lg font-semibold text-lg">
+                <span class="material-symbols-outlined">settings</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="settings-modal hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl p-6 md:p-8 shadow-2xl w-full max-w-2xl text-gray-800">
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="settings-title" data-translate="settings" class="text-3xl font-bold">Einstellungen</h2>
+                <button id="close-settings-button" class="text-3xl">&times;</button>
+            </div>
+            <div class="space-y-6">
+                <div><h3 data-translate="layout" class="text-xl font-semibold mb-2">Layout</h3><div class="grid grid-cols-2 gap-4"><button id="layout-vertical" title="Vertikal" class="setting-btn p-3 rounded-lg border-2 flex justify-center"><span class="material-symbols-outlined">horizontal_split</span></button><button id="layout-horizontal" title="Horizontal" class="setting-btn p-3 rounded-lg border-2 flex justify-center"><span class="material-symbols-outlined">vertical_split</span></button></div></div>
+                <div><h3 data-translate="gameMode" class="text-xl font-semibold mb-2">Spielmodus</h3><div class="grid grid-cols-2 gap-4"><button id="mode-singles" data-translate="singles" class="setting-btn p-3 rounded-lg border-2">Einzel</button><button id="mode-doubles" data-translate="doubles" class="setting-btn p-3 rounded-lg border-2">Doppel</button></div></div>
+                <div><h3 data-translate="theme" class="text-xl font-semibold mb-2">Theme</h3><div id="theme-selection" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div></div>
+                <div><h3 data-translate="matchFormat" class="text-xl font-semibold mb-2">Gewinnsätze</h3><div class="grid grid-cols-2 gap-4"><button id="format-bo3" class="setting-btn p-3 rounded-lg border-2">2</button><button id="format-bo5" class="setting-btn p-3 rounded-lg border-2">3</button></div></div>
+                <div><h3 data-translate="language" class="text-xl font-semibold mb-2">Sprache</h3><div class="grid grid-cols-2 gap-4"><button id="lang-de" class="setting-btn p-3 rounded-lg border-2">Deutsch</button><button id="lang-en" class="setting-btn p-3 rounded-lg border-2">English</button></div></div>
+                <div><h3 data-translate="animations" class="text-xl font-semibold mb-2">Animationen</h3><div class="grid grid-cols-2 gap-4"><button id="animations-on" data-translate="animationsOn" class="setting-btn p-3 rounded-lg border-2">An</button><button id="animations-off" data-translate="animationsOff" class="setting-btn p-3 rounded-lg border-2">Aus</button></div></div>
+                <div><h3 data-translate="newGame" class="text-xl font-semibold mb-2">Neues Spiel</h3><button id="new-game-button" data-translate="newGameButton" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-lg">Neues Spiel starten</button></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const themes = {
+            ausopen: { name: 'Australian Open', class: 'theme-ausopen', colors: { p1_bg: 'bg-[#0D69C2]', p1_text: 'text-white', p2_bg: 'bg-white', p2_text: 'text-[#0D69C2]', border: 'border-white', status_bg: 'bg-yellow-400', status_text: 'text-black' } },
+            frenchopen: { name: 'Roland Garros', class: 'theme-frenchopen', colors: { p1_bg: 'bg-[#CB5A29]', p1_text: 'text-white', p2_bg: 'bg-[#00539F]', p2_text: 'text-white', border: 'border-white', status_bg: 'bg-white', status_text: 'text-[#CB5A29]' } },
+            wimbledon: { name: 'Wimbledon', class: 'theme-wimbledon', colors: { p1_bg: 'bg-[#006633]', p1_text: 'text-white', p2_bg: 'bg-[#552788]', p2_text: 'text-white', border: 'border-[#FDEB7B]', status_bg: 'bg-white', status_text: 'text-[#552788]' } },
+            usopen: { name: 'US Open', class: 'theme-usopen', colors: { p1_bg: 'bg-[#0038A8]', p1_text: 'text-white', p2_bg: 'bg-[#E03C31]', p2_text: 'text-white', border: 'border-white', status_bg: 'bg-yellow-300', status_text: 'text-black' } },
+            melike: { name: 'Melike', class: 'theme-melike', colors: { p1_bg: 'bg-[#E6A4B4]', p1_text: 'text-white', p2_bg: 'bg-[#7B3F00]', p2_text: 'text-white', border: 'border-white', status_bg: 'bg-white', status_text: 'text-[#7B3F00]' } },
+            ostfalia: { name: 'OSZ', class: 'theme-ostfalia', colors: { p1_bg: 'bg-[#7AB51D]', p1_text: 'text-white', p2_bg: 'bg-[#00467F]', p2_text: 'text-white', border: 'border-white', status_bg: 'bg-white', status_text: 'text-[#00467F]' } },
+            ludwig: { name: 'Ludwig', class: 'theme-ludwig', colors: { p1_bg: 'bg-[#5A2A82]', p1_text: 'text-[#FFFFF0]', p2_bg: 'bg-[#FFFFF0]', p2_text: 'text-[#5A2A82]', border: 'border-[#FFFFF0]', status_bg: 'bg-[#FFFFF0]', status_text: 'text-[#5A2A82]' } }
+        };
+
+        const translations = {
+            de: { player1: "Spieler 1", player2: "Spieler 2", undo: "Rückgängig", settings: "Einstellungen", layout: "Layout", vertical: "Vertikal", horizontal: "Horizontal", theme: "Theme", matchFormat: "Gewinnsätze", language: "Sprache", matchPoint: "Matchball", setPoint: "Satzball", breakPoint: "Breakball", winsTheMatch: "gewinnt das Match!", gameMode: "Spielmodus", singles: "Einzel", doubles: "Doppel", newGame: "Neues Spiel", newGameButton: "Neues Spiel starten", animations: "Animationen", animationsOn: "An", animationsOff: "Aus" },
+            en: { player1: "Player 1", player2: "Player 2", undo: "Undo", settings: "Settings", layout: "Layout", vertical: "Vertical", horizontal: "Horizontal", theme: "Theme", matchFormat: "Winning Sets", language: "Language", matchPoint: "Match Point", setPoint: "Set Point", breakPoint: "Break Point", winsTheMatch: "wins the match!", gameMode: "Game Mode", singles: "Singles", doubles: "Doubles", newGame: "New Game", newGameButton: "Start New Game", animations: "Animations", animationsOn: "On", animationsOff: "Off" }
+        };
+
+        let state = {
+            players: [ 
+                { names: ['Spieler 1', ''], points: 0, games: 0, setScores: [] }, 
+                { names: ['Spieler 2', ''], points: 0, games: 0, setScores: [] } 
+            ],
+            serverTeam: 0,
+            serverPlayerIndex: 0, // 0 or 1 within the team
+            servingOrderIndex: 0, // 0-3 for doubles serving rotation
+            isTieBreak: false, 
+            winner: null, 
+            history: [],
+            settings: { 
+                theme: 'ausopen', 
+                layout: 'vertical', 
+                setsToWin: 2, 
+                lang: 'de',
+                gameMode: 'singles', // 'singles' or 'doubles'
+                animations: true
+            }
+        };
+        
+        const appContainer = document.getElementById('app-container');
+        const scoreboardContainer = document.getElementById('scoreboard-container');
+        const p1Section = document.getElementById('player1-section');
+        const p2Section = document.getElementById('player2-section');
+        const undoBtn = document.getElementById('undo-button');
+        const statusBanner = document.getElementById('status-banner');
+        const statusText = document.getElementById('status-text');
+        const finalScoreContainer = document.getElementById('final-score-container');
+        const settingsModal = document.getElementById('settings-modal');
+        const settingsBtn = document.getElementById('settings-button');
+        const closeSettingsBtn = document.getElementById('close-settings-button');
+        const themeSelectionContainer = document.getElementById('theme-selection');
+        const newGameBtn = document.getElementById('new-game-button');
+        const pointValues = [0, 15, 30, 40];
+
+        function initializeApp() {
+            // PWA Setup
+            const manifest = {
+              "name": "Tennis Scoreboard",
+              "short_name": "Scoreboard",
+              "start_url": ".",
+              "display": "standalone",
+              "background_color": "#0D69C2",
+              "theme_color": "#0D69C2",
+              "description": "idea by greg\nsupportet by vladislava\ncoded by gemini 2.5 pro\n2025\nFCKPTN",
+              "icons": [
+                {
+                  "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48dGV4dCB5PSIuOWVtIiBmb250LXNpemU9IjkwIj7wn42lPC90ZXh0Pjwvc3ZnPg==",
+                  "sizes": "192x192 512x512",
+                  "type": "image/svg+xml"
+                }
+              ]
+            };
+            const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+            document.getElementById('manifest').href = URL.createObjectURL(manifestBlob);
+
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register(
+                    URL.createObjectURL(new Blob([`
+                        const CACHE_NAME = 'tennis-scoreboard-cache-v1';
+                        self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(['/']))) });
+                        self.addEventListener('fetch', e => { e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))) });
+                    `], {type: 'application/javascript'}))
+                ).then(reg => console.log('Service worker registered.')).catch(err => console.log('Service worker not registered.', err));
+            }
+
+            // Theme Buttons Setup
+            Object.keys(themes).forEach(key => {
+                const theme = themes[key];
+                const button = document.createElement('button');
+                button.id = `theme-${key}`; button.textContent = theme.name;
+                button.className = 'setting-btn p-3 rounded-lg border-2 truncate h-full flex items-center justify-center';
+                const p1_bg = theme.colors.p1_bg.replace('bg-[', '').replace(']', '');
+                button.style.backgroundColor = p1_bg; button.style.borderColor = p1_bg;
+                button.style.color = theme.colors.p1_text === 'text-white' || theme.colors.p1_text === 'text-[#FFFFF0]' ? 'white' : 'black';
+                button.addEventListener('click', () => updateSetting('theme', key));
+                themeSelectionContainer.appendChild(button);
+            });
+            addEventListeners();
+            applyAllSettings();
+            render();
+        }
+
+        function addEventListeners() {
+            p1Section.addEventListener('click', (e) => { if (!e.target.isContentEditable) awardPoint(0); });
+            p2Section.addEventListener('click', (e) => { if (!e.target.isContentEditable) awardPoint(1); });
+            undoBtn.addEventListener('click', (e) => { e.stopPropagation(); undo(); });
+            
+            for (let t=1; t<=2; t++) {
+                for (let p=1; p<=2; p++) {
+                    const nameEl = document.getElementById(`player${t}-name${p}`);
+                    nameEl.addEventListener('blur', () => { state.players[t-1].names[p-1] = nameEl.textContent.trim(); render(); });
+                    nameEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameEl.blur(); });
+                }
+            }
+
+            settingsBtn.addEventListener('click', () => settingsModal.classList.remove('hidden'));
+            closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
+            
+            document.getElementById('layout-vertical').addEventListener('click', () => updateSetting('layout', 'vertical'));
+            document.getElementById('layout-horizontal').addEventListener('click', () => updateSetting('layout', 'horizontal'));
+            document.getElementById('mode-singles').addEventListener('click', () => updateSetting('gameMode', 'singles'));
+            document.getElementById('mode-doubles').addEventListener('click', () => updateSetting('gameMode', 'doubles'));
+            document.getElementById('format-bo3').addEventListener('click', () => updateSetting('setsToWin', 2));
+            document.getElementById('format-bo5').addEventListener('click', () => updateSetting('setsToWin', 3));
+            document.getElementById('lang-de').addEventListener('click', () => updateSetting('lang', 'de'));
+            document.getElementById('lang-en').addEventListener('click', () => updateSetting('lang', 'en'));
+            document.getElementById('animations-on').addEventListener('click', () => updateSetting('animations', true));
+            document.getElementById('animations-off').addEventListener('click', () => updateSetting('animations', false));
+            newGameBtn.addEventListener('click', resetGame);
+        }
+
+        function resetGame() {
+            state.players[0].points = 0;
+            state.players[0].games = 0;
+            state.players[0].setScores = [];
+            state.players[1].points = 0;
+            state.players[1].games = 0;
+            state.players[1].setScores = [];
+            state.serverTeam = 0;
+            state.servingOrderIndex = 0;
+            state.isTieBreak = false;
+            state.winner = null;
+            state.history = [];
+            appContainer.classList.remove('game-over');
+            settingsModal.classList.add('hidden');
+            render();
+        }
+        
+        function updateSetting(key, value) {
+            const modeChanged = key === 'gameMode' && state.settings.gameMode !== value;
+            state.settings[key] = value;
+
+            if (modeChanged) {
+                const t = translations[state.settings.lang];
+                if (value === 'doubles') {
+                    state.players[0].names = [`${t.player1.split(' ')[0]} 1A`, `${t.player1.split(' ')[0]} 1B`];
+                    state.players[1].names = [`${t.player2.split(' ')[0]} 2A`, `${t.player2.split(' ')[0]} 2B`];
+                } else { // singles
+                    state.players[0].names = [t.player1, ''];
+                    state.players[1].names = [t.player2, ''];
+                }
+            }
+            
+            applyAllSettings();
+            render();
+        }
+
+        function applyAllSettings() {
+            applyTheme(themes[state.settings.theme]);
+            applyLayout(state.settings.layout);
+            applyGameMode(state.settings.gameMode);
+            applyAnimationSetting(state.settings.animations);
+            setLanguage(state.settings.lang);
+            updateSettingsUI();
+        }
+
+        function applyAnimationSetting(enabled) {
+            if (enabled) {
+                appContainer.classList.add('animations-enabled');
+            } else {
+                appContainer.classList.remove('animations-enabled');
+            }
+        }
+
+        function applyGameMode(mode) {
+            const p1_p2 = document.getElementById('player1-p2');
+            const p2_p2 = document.getElementById('player2-p2');
+            appContainer.classList.remove('mode-singles', 'mode-doubles');
+            appContainer.classList.add(`mode-${mode}`);
+
+            if (mode === 'doubles') {
+                p1_p2.classList.remove('hidden');
+                p2_p2.classList.remove('hidden');
+            } else {
+                p1_p2.classList.add('hidden');
+                p2_p2.classList.add('hidden');
+            }
+        }
+        
+        function applyLayout(layout) {
+            appContainer.classList.remove('layout-vertical', 'layout-horizontal');
+            appContainer.classList.add(`layout-${layout}`);
+            scoreboardContainer.classList.remove('flex-col', 'flex-row');
+            p1Section.classList.remove('border-b-4', 'border-r-4');
+            if (layout === 'horizontal') {
+                scoreboardContainer.classList.add('flex-row');
+                p1Section.classList.add('border-r-4');
+            } else {
+                scoreboardContainer.classList.add('flex-col');
+                p1Section.classList.add('border-b-4');
+            }
+        }
+
+        function applyTheme(theme) {
+            appContainer.classList.remove(...Object.values(themes).map(t => t.class));
+            appContainer.classList.add(theme.class);
+            const applyClasses = (element, classList) => {
+                const colors = ['bg-', 'text-', 'border-'];
+                const oldClasses = Array.from(element.classList).filter(c => colors.some(prefix => c.startsWith(prefix)));
+                element.classList.remove(...oldClasses);
+                element.classList.add(...classList);
+            };
+            const colors = theme.colors;
+            applyClasses(p1Section, [colors.p1_bg, colors.p1_text, colors.border]);
+            applyClasses(p2Section, [colors.p2_bg, colors.p2_text]);
+            // Use winner's colors for banner only when there is a winner
+            if (state.winner === null) {
+                 applyClasses(statusBanner, [colors.status_bg, colors.status_text]);
+            }
+        }
+
+        function setLanguage(lang) {
+            const t = translations[lang];
+            document.documentElement.lang = lang;
+            document.querySelectorAll('[data-translate]').forEach(el => {
+                const key = el.getAttribute('data-translate');
+                if (t[key]) el.textContent = t[key];
+            });
+            // ... (rest of language logic)
+        }
+
+        function updateSettingsUI() {
+            document.querySelectorAll('.setting-btn.active').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.setting-btn').forEach(b => b.classList.add('border-gray-300'));
+            const activeLayout = document.getElementById(`layout-${state.settings.layout}`);
+            const activeMode = document.getElementById(`mode-${state.settings.gameMode}`);
+            const activeFormat = document.getElementById(state.settings.setsToWin === 2 ? 'format-bo3' : 'format-bo5');
+            const activeLang = document.getElementById(`lang-${state.settings.lang}`);
+            const activeTheme = document.getElementById(`theme-${state.settings.theme}`);
+            const activeAnimation = document.getElementById(state.settings.animations ? 'animations-on' : 'animations-off');
+            [activeLayout, activeMode, activeFormat, activeLang, activeTheme, activeAnimation].forEach(btn => {
+                if (btn) {
+                    btn.classList.add('active');
+                    btn.classList.remove('border-gray-300');
+                }
+            });
+        }
+
+        function saveState() {
+            const { history, ...stateToSave } = state;
+            state.history.push(JSON.parse(JSON.stringify(stateToSave)));
+            if (state.history.length > 20) state.history.shift();
+        }
+
+        function undo() {
+            if (state.history.length > 0) {
+                appContainer.classList.remove('game-over');
+                const previousState = state.history.pop();
+                const currentSettings = state.settings;
+                state = { ...previousState, history: state.history, settings: currentSettings };
+                applyAllSettings();
+                render();
+            }
+        }
+
+        function render() {
+            renderPlayerNames();
+            renderScores();
+            renderServer();
+            undoBtn.disabled = state.history.length === 0;
+            undoBtn.style.opacity = undoBtn.disabled ? 0.5 : 1;
+            checkGameStatus();
+        }
+        
+        function renderPlayerNames() {
+            const t = translations[state.settings.lang];
+            for (let teamIdx=0; teamIdx<2; teamIdx++) {
+                for (let playerIdx=0; playerIdx<2; playerIdx++) {
+                    const nameEl = document.getElementById(`player${teamIdx+1}-name${playerIdx+1}`);
+                    let name = state.players[teamIdx].names[playerIdx];
+                    if (!name && state.settings.gameMode === 'singles' && playerIdx === 0) {
+                        name = t[`player${teamIdx+1}`];
+                        state.players[teamIdx].names[playerIdx] = name;
+                    } else if (!name && state.settings.gameMode === 'doubles') {
+                        name = `${t.player1.split(' ')[0]} ${teamIdx+1}${playerIdx === 0 ? 'A' : 'B'}`;
+                        state.players[teamIdx].names[playerIdx] = name;
+                    }
+                    if (document.activeElement !== nameEl) {
+                        nameEl.textContent = name;
+                    }
+                }
+            }
+        }
+
+        function renderServer() {
+            document.querySelectorAll('.server-indicator').forEach(el => el.parentElement.classList.remove('serving-player'));
+            
+            let serverTeam, serverPlayerIndex;
+            if (state.settings.gameMode === 'doubles') {
+                const servingOrder = [ {team: 0, player: 0}, {team: 1, player: 0}, {team: 0, player: 1}, {team: 1, player: 1} ];
+                const currentServer = servingOrder[state.servingOrderIndex];
+                serverTeam = currentServer.team;
+                serverPlayerIndex = currentServer.player;
+            } else {
+                serverTeam = state.serverTeam;
+                serverPlayerIndex = 0; // In singles, it's always the first player of the team
+            }
+
+            const serverEl = document.getElementById(`player${serverTeam + 1}-p${serverPlayerIndex + 1}`);
+            if (serverEl) {
+                serverEl.classList.add('serving-player');
+            }
+        }
+
+        function renderScores() {
+            for (let i = 0; i < 2; i++) {
+                const player = state.players[i];
+                const setScoresContainer = document.getElementById(`player${i+1}-set-scores`);
+                const gamesEl = document.getElementById(`player${i+1}-games`);
+                setScoresContainer.innerHTML = '';
+                player.setScores.forEach(score => {
+                    const scoreEl = document.createElement('div');
+                    scoreEl.className = 'w-10 md:w-12 text-center opacity-70';
+                    scoreEl.textContent = score;
+                    setScoresContainer.appendChild(scoreEl);
+                });
+                gamesEl.textContent = player.games;
+            }
+            renderPoints();
+        }
+        
+        function renderPoints() {
+            const p1PointsEl = document.getElementById('player1-points');
+            const p2PointsEl = document.getElementById('player2-points');
+
+            p1PointsEl.style.visibility = 'visible';
+            p2PointsEl.style.visibility = 'visible';
+
+            if (state.isTieBreak) {
+                p1PointsEl.textContent = state.players[0].points;
+                p2PointsEl.textContent = state.players[1].points;
+            } else {
+                if (state.players[0].points >= 3 && state.players[1].points >= 3) {
+                    if (state.players[0].points === state.players[1].points) {
+                        p1PointsEl.textContent = '40';
+                        p2PointsEl.textContent = '40';
+                    } else if (state.players[0].points > state.players[1].points) {
+                        p1PointsEl.textContent = 'AD';
+                        p2PointsEl.textContent = '40'; // Keep content for spacing
+                        p2PointsEl.style.visibility = 'hidden'; // Hide it
+                    } else {
+                        p1PointsEl.textContent = '40'; // Keep content for spacing
+                        p2PointsEl.textContent = 'AD';
+                        p1PointsEl.style.visibility = 'hidden'; // Hide it
+                    }
+                } else {
+                    p1PointsEl.textContent = pointValues[state.players[0].points];
+                    p2PointsEl.textContent = pointValues[state.players[1].points];
+                }
+            }
+        }
+
+        function awardPoint(teamIndex) {
+            if (state.winner !== null) return;
+            saveState();
+            if (state.isTieBreak) scoreTieBreak(teamIndex);
+            else scoreRegular(teamIndex);
+            render();
+        }
+        
+        function scoreRegular(teamIndex) {
+            const playerTeam = state.players[teamIndex];
+            const opponentTeam = state.players[1 - teamIndex];
+            if (playerTeam.points === 3 && opponentTeam.points < 3) { winGame(teamIndex); } 
+            else if (playerTeam.points === 3 && opponentTeam.points === 3) { playerTeam.points++; }
+            else if (playerTeam.points === 4) { winGame(teamIndex); }
+            else if (opponentTeam.points === 4) { opponentTeam.points = 3; playerTeam.points = 3; }
+            else { playerTeam.points++; }
+        }
+
+        function scoreTieBreak(teamIndex) {
+            const playerTeam = state.players[teamIndex];
+            const opponentTeam = state.players[1 - teamIndex];
+            playerTeam.points++;
+
+            if (playerTeam.points >= 7 && playerTeam.points - opponentTeam.points >= 2) {
+                playerTeam.games++;
+                winSet(teamIndex);
+            }
+
+            const totalPoints = playerTeam.points + opponentTeam.points;
+            if (totalPoints > 0 && totalPoints % 2 === 1) {
+                if (state.settings.gameMode === 'doubles') {
+                    state.servingOrderIndex = (state.servingOrderIndex + 1) % 4;
+                } else {
+                    state.serverTeam = 1 - state.serverTeam;
+                }
+            }
+        }
+
+        function winGame(teamIndex) {
+            const playerTeam = state.players[teamIndex];
+            playerTeam.games++;
+            const opponentTeam = state.players[1 - teamIndex];
+            if ((playerTeam.games >= 6 && playerTeam.games - opponentTeam.games >= 2) || (playerTeam.games === 7 && opponentTeam.games === 6)) {
+                winSet(teamIndex);
+            } else if (playerTeam.games === 6 && opponentTeam.games === 6) {
+                state.isTieBreak = true;
+                if (state.settings.gameMode === 'doubles') {
+                    state.servingOrderIndex = (state.servingOrderIndex + 1) % 4;
+                } else {
+                    state.serverTeam = 1 - state.serverTeam;
+                }
+            } else {
+                state.players[0].points = 0;
+                state.players[1].points = 0;
+                if (state.settings.gameMode === 'doubles') {
+                    state.servingOrderIndex = (state.servingOrderIndex + 1) % 4;
+                } else {
+                    state.serverTeam = 1 - state.serverTeam;
+                }
+            }
+        }
+
+        function winSet(teamIndex) {
+            state.players[0].setScores.push(state.players[0].games);
+            state.players[1].setScores.push(state.players[1].games);
+            state.players[0].games = 0; state.players[1].games = 0;
+            state.players[0].points = 0; state.players[1].points = 0;
+            state.isTieBreak = false;
+            
+            if (state.settings.gameMode === 'doubles') {
+                state.servingOrderIndex = (state.servingOrderIndex + 1) % 4;
+            } else {
+                state.serverTeam = 1 - state.serverTeam;
+            }
+
+            const p1SetsWon = state.players[0].setScores.filter((s, i) => s > state.players[1].setScores[i]).length;
+            const p2SetsWon = state.players[1].setScores.filter((s, i) => s > state.players[0].setScores[i]).length;
+
+            if (p1SetsWon === state.settings.setsToWin) {
+                state.winner = 0;
+                appContainer.classList.add('game-over');
+            } else if (p2SetsWon === state.settings.setsToWin) {
+                state.winner = 1;
+                appContainer.classList.add('game-over');
+            }
+        }
+        
+        function checkGameStatus() {
+            statusText.textContent = '';
+            finalScoreContainer.innerHTML = '';
+            statusBanner.classList.remove('fade-in');
+            scoreboardContainer.classList.remove('status-active');
+            const t = translations[state.settings.lang];
+
+            const getTeamName = (teamIdx) => {
+                if (state.settings.gameMode === 'doubles') {
+                    return `${state.players[teamIdx].names[0]} / ${state.players[teamIdx].names[1]}`;
+                }
+                return state.players[teamIdx].names[0];
+            };
+
+            if (state.winner !== null) {
+                const winnerIdx = state.winner;
+                const loserIdx = 1 - winnerIdx;
+                
+                const themeColors = themes[state.settings.theme].colors;
+                const winnerBg = winnerIdx === 0 ? themeColors.p1_bg : themeColors.p2_bg;
+                const winnerText = winnerIdx === 0 ? themeColors.p1_text : themeColors.p2_text;
+                const applyClasses = (element, classList) => {
+                    const colors = ['bg-', 'text-', 'border-'];
+                    const oldClasses = Array.from(element.classList).filter(c => colors.some(prefix => c.startsWith(prefix)));
+                    element.classList.remove(...oldClasses);
+                    element.classList.add(...classList);
+                };
+                applyClasses(statusBanner, [winnerBg, winnerText]);
+
+                statusText.textContent = `${getTeamName(state.winner)} ${t.winsTheMatch}`;
+                
+                const scoreTable = document.createElement('div');
+                scoreTable.className = 'text-center inline-block text-2xl md:text-4xl lg:text-5xl';
+
+                const winnerRow = document.createElement('div');
+                winnerRow.className = 'flex items-center gap-4 font-bold';
+                const winnerNameEl = document.createElement('div');
+                winnerNameEl.className = 'w-56 md:w-72 lg:w-[450px] text-left truncate';
+                winnerNameEl.textContent = getTeamName(winnerIdx);
+                winnerRow.appendChild(winnerNameEl);
+                state.players[winnerIdx].setScores.forEach(score => {
+                    const scoreEl = document.createElement('div');
+                    scoreEl.className = 'w-12 md:w-16 text-center';
+                    scoreEl.textContent = score;
+                    winnerRow.appendChild(scoreEl);
+                });
+                scoreTable.appendChild(winnerRow);
+
+                const loserRow = document.createElement('div');
+                loserRow.className = 'flex items-center gap-4 mt-1 opacity-80';
+                const loserNameEl = document.createElement('div');
+                loserNameEl.className = 'w-56 md:w-72 lg:w-[450px] text-left truncate';
+                loserNameEl.textContent = getTeamName(loserIdx);
+                loserRow.appendChild(loserNameEl);
+                state.players[loserIdx].setScores.forEach(score => {
+                    const scoreEl = document.createElement('div');
+                    scoreEl.className = 'w-12 md:w-16 text-center';
+                    scoreEl.textContent = score;
+                    loserRow.appendChild(scoreEl);
+                });
+                scoreTable.appendChild(loserRow);
+                
+                finalScoreContainer.appendChild(scoreTable);
+                statusBanner.classList.add('fade-in');
+                return;
+            }
+            
+            applyTheme(themes[state.settings.theme]); // Reset banner to default theme status color
+            const servingOrder = [ {team: 0, player: 0}, {team: 1, player: 0}, {team: 0, player: 1}, {team: 1, player: 1} ];
+            const serverTeam = state.settings.gameMode === 'doubles' ? servingOrder[state.servingOrderIndex].team : state.serverTeam;
+            const receiver = 1 - serverTeam;
+            let status = '';
+
+            if (isPointAwayFromWinningMatch(0)) status = `${t.matchPoint} ${getTeamName(0)}`;
+            else if (isPointAwayFromWinningMatch(1)) status = `${t.matchPoint} ${getTeamName(1)}`;
+            else if (isPointAwayFromWinningSet(0)) status = `${t.setPoint} ${getTeamName(0)}`;
+            else if (isPointAwayFromWinningSet(1)) status = `${t.setPoint} ${getTeamName(1)}`;
+            else if (isPointAwayFromWinningGame(receiver)) status = `${t.breakPoint} ${getTeamName(receiver)}`;
+            
+            if (status) {
+                statusText.textContent = status;
+                statusBanner.classList.add('fade-in');
+                scoreboardContainer.classList.add('status-active');
+            }
+        }
+        
+        const isPointAwayFromWinningGame = (teamIdx) => {
+            if (state.isTieBreak) return false;
+            const p = state.players[teamIdx];
+            const o = state.players[1 - teamIdx];
+            return p.points >= 3 && p.points > o.points;
+        };
+
+        const isPointAwayFromWinningSet = (teamIdx) => {
+            const p = state.players[teamIdx];
+            const o = state.players[1 - teamIdx];
+            if (state.isTieBreak) return p.points >= 6 && p.points > o.points;
+            return (p.games >= 5 && p.games > o.games && isPointAwayFromWinningGame(teamIdx));
+        };
+
+        const isPointAwayFromWinningMatch = (teamIdx) => {
+            const p1SetsWon = state.players[0].setScores.filter((s, i) => s > state.players[1].setScores[i]).length;
+            const p2SetsWon = state.players[1].setScores.filter((s, i) => s > state.players[0].setScores[i]).length;
+            const setsWon = teamIdx === 0 ? p1SetsWon : p2SetsWon;
+            return setsWon === (state.settings.setsToWin - 1) && isPointAwayFromWinningSet(teamIdx);
+        };
+        
+        initializeApp();
+    </script>
+</body>
+</html>
